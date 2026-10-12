@@ -166,23 +166,9 @@ class Dbprovider extends ChangeNotifier {
           .map((row) => Customermodel.fromMap(row))
           .toList();
       _calculateStats();
-      try {
-        // Return dates that have passed are not reported here: each one is
-        // marked overdue on its entry, where it can be extended.
-        final result = await _paymentReminders.rescheduleAll(db);
-        if (result.failedTransactions > 0) {
-          debugPrint(
-            'Could not restore ${result.failedTransactions} payment '
-            'reminders. First error: ${result.firstFailure}',
-          );
-          _operationError =
-              '${result.failedTransactions} payment reminder(s) could not be '
-              'scheduled. Check their return dates and notification access.';
-        }
-      } catch (error, stackTrace) {
-        debugPrint('Restoring payment reminders failed: $error\n$stackTrace');
-        _reportOperationError('Restoring payment reminders', error);
-      }
+      // Not awaited: this talks to the OS once per reminder, and waiting for
+      // it kept the splash screen up long after the data was ready.
+      unawaited(_restoreReminders(db));
     } catch (error, stackTrace) {
       debugPrint('Initial database load failed: $error\n$stackTrace');
       _initialLoadError =
@@ -190,6 +176,40 @@ class Dbprovider extends ChangeNotifier {
     } finally {
       _isLoadingInitialData = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> _restoreReminders(DatabaseExecutor db) async {
+    final uid = _activeUid;
+    try {
+      // Return dates that have passed are not reported here: each one is
+      // marked overdue on its entry, where it can be extended.
+      final result = await _paymentReminders.rescheduleAll(db);
+      if (result.failedTransactions > 0 && uid == _activeUid) {
+        debugPrint(
+          'Could not restore ${result.failedTransactions} payment '
+          'reminders. First error: ${result.firstFailure}',
+        );
+        _operationError =
+            '${result.failedTransactions} payment reminder(s) could not be '
+            'scheduled. Check their return dates and notification access.';
+        notifyListeners();
+      }
+    } catch (error, stackTrace) {
+      debugPrint('Restoring payment reminders failed: $error\n$stackTrace');
+      if (uid == _activeUid) {
+        _reportOperationError('Restoring payment reminders', error);
+      }
+    }
+  }
+
+  /// A balance change can settle a khata or reopen it, so the reminders of
+  /// every entry of that customer are cancelled or scheduled to match.
+  Future<void> _syncCustomerReminders(DatabaseExecutor db, int customerId) async {
+    try {
+      await _paymentReminders.rescheduleAll(db, customerId: customerId);
+    } catch (error, stackTrace) {
+      debugPrint('Refreshing customer reminders failed: $error\n$stackTrace');
     }
   }
 
@@ -328,6 +348,7 @@ class Dbprovider extends ChangeNotifier {
 
       // Only this customer changed: refresh that row and their history,
       // then update the screen once.
+      await _syncCustomerReminders(db, customer.id!);
       await _refreshCustomer(db, customer.id!);
       await _loadCustomerTransactions(db, customer.id!);
       notifyListeners();
@@ -423,6 +444,7 @@ class Dbprovider extends ChangeNotifier {
           debugPrint('Updating payment reminder failed: $error\n$stackTrace');
           _reportOperationError('Updating payment reminder', error);
         }
+        await _syncCustomerReminders(db, original.customerId!);
       }
       notifyListeners();
     } catch (e) {

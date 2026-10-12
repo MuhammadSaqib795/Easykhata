@@ -18,6 +18,7 @@ class _SplashscreenState extends State<Splashscreen>
     with SingleTickerProviderStateMixin {
   final Splashservises _splashservises = Splashservises();
   late final AnimationController _motion;
+  late final Animation<double> _pulse;
 
   @override
   void initState() {
@@ -26,6 +27,7 @@ class _SplashscreenState extends State<Splashscreen>
       vsync: this,
       duration: const Duration(milliseconds: 3200),
     )..repeat();
+    _pulse = _motion.drive(const _Pulse());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _splashservises.login(context);
@@ -112,26 +114,24 @@ class _SplashscreenState extends State<Splashscreen>
                               height: constraints.maxHeight < 520 ? 16 : 32,
                             ),
                             Center(
-                              child: AnimatedBuilder(
-                                animation: _motion,
-                                builder: (context, child) => SizedBox(
+                              // Nothing here rebuilds per frame: the painter
+                              // and the scale listen to the controller, and
+                              // the blurred logo card is drawn once and reused.
+                              child: SizedBox(
                                   width: orbitSize,
                                   height: orbitSize,
                                   child: Stack(
                                     alignment: Alignment.center,
                                     children: [
-                                      CustomPaint(
-                                        size: Size.square(orbitSize),
-                                        painter: _OrbitPainter(_motion.value),
+                                      RepaintBoundary(
+                                        child: CustomPaint(
+                                          size: Size.square(orbitSize),
+                                          painter: _OrbitPainter(_motion),
+                                        ),
                                       ),
-                                      Transform.scale(
-                                        scale:
-                                            1 +
-                                            math.sin(
-                                                  _motion.value * math.pi * 2,
-                                                ) *
-                                                0.025,
-                                        child: Container(
+                                      ScaleTransition(
+                                        scale: _pulse,
+                                        child: RepaintBoundary(child: Container(
                                           width: logoSize + 30,
                                           height: logoSize + 30,
                                           padding: const EdgeInsets.all(11),
@@ -157,11 +157,10 @@ class _SplashscreenState extends State<Splashscreen>
                                             ],
                                           ),
                                           child: BrandLogo(size: logoSize),
-                                        ),
+                                        )),
                                       ),
                                     ],
                                   ),
-                                ),
                               ),
                             ),
                             const SizedBox(height: 18),
@@ -285,12 +284,13 @@ class _SplashscreenState extends State<Splashscreen>
 }
 
 class _OrbitPainter extends CustomPainter {
-  const _OrbitPainter(this.progress);
+  _OrbitPainter(this.animation) : super(repaint: animation);
 
-  final double progress;
+  final Animation<double> animation;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final progress = animation.value;
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.shortestSide * 0.43;
     final orbitRect = Rect.fromCircle(center: center, radius: radius);
@@ -340,7 +340,15 @@ class _OrbitPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _OrbitPainter oldDelegate) =>
-      oldDelegate.progress != progress;
+      oldDelegate.animation != animation;
+}
+
+/// Gentle breathing of the logo: one slow in-and-out per orbit.
+class _Pulse extends Animatable<double> {
+  const _Pulse();
+
+  @override
+  double transform(double t) => 1 + math.sin(t * math.pi * 2) * 0.025;
 }
 
 class _GlowOrb extends StatelessWidget {

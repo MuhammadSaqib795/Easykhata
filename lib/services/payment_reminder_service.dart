@@ -504,27 +504,40 @@ class PaymentReminderService {
     await _notifications.cancelAll();
   }
 
-  Future<ReminderRescheduleResult> rescheduleAll(DatabaseExecutor db) async {
+  /// Brings scheduled reminders in line with the database: for every entry
+  /// with a return date, or only those of [customerId] after that customer's
+  /// balance changed.
+  Future<ReminderRescheduleResult> rescheduleAll(
+    DatabaseExecutor db, {
+    int? customerId,
+  }) async {
     await initialize();
-    final rows = await db.rawQuery('''
+    final rows = await db.rawQuery(
+      '''
       SELECT t.${Dbhelper.colTransId}, t.${Dbhelper.colAmount},
         t.${Dbhelper.colTrantype}, t.${Dbhelper.colTranPaymentDueAt},
         t.${Dbhelper.colTranPaymentDueMinute},
-        c.${Dbhelper.colCustomerName}
+        c.${Dbhelper.colCustomerName},
+        c.${Dbhelper.colCustomerCurrentBalance}
       FROM ${Dbhelper.tableTrans} t
       INNER JOIN ${Dbhelper.tableCus} c
         ON c.${Dbhelper.colCustomerId} = t.${Dbhelper.colTranCusId}
       WHERE t.${Dbhelper.colTranPaymentDueAt} IS NOT NULL
-    ''');
+        ${customerId == null ? '' : 'AND c.${Dbhelper.colCustomerId} = ?'}
+    ''',
+      [?customerId],
+    );
 
-    final activeTransactionIds = rows
-        .map((row) => (row[Dbhelper.colTransId] as num).toInt())
-        .toSet();
-    final pending = await _notifications.pendingNotificationRequests();
-    for (final notification in pending) {
-      final transactionId = notification.id ~/ _notificationCount;
-      if (!activeTransactionIds.contains(transactionId)) {
-        await _notifications.cancel(id: notification.id);
+    if (customerId == null) {
+      final activeTransactionIds = rows
+          .map((row) => (row[Dbhelper.colTransId] as num).toInt())
+          .toSet();
+      final pending = await _notifications.pendingNotificationRequests();
+      for (final notification in pending) {
+        final transactionId = notification.id ~/ _notificationCount;
+        if (!activeTransactionIds.contains(transactionId)) {
+          await _notifications.cancel(id: notification.id);
+        }
       }
     }
 
@@ -534,6 +547,17 @@ class PaymentReminderService {
     for (final row in rows) {
       try {
         final id = (row[Dbhelper.colTransId] as num).toInt();
+        // Once the khata is settled (or has turned the other way) nothing is
+        // owed for this entry, so its reminders must not fire.
+        final balance =
+            (row[Dbhelper.colCustomerCurrentBalance] as num?)?.toDouble() ?? 0;
+        final stillOwed = row[Dbhelper.colTrantype] == 'Gave'
+            ? balance > 0
+            : balance < 0;
+        if (!stillOwed) {
+          await cancelTransaction(id);
+          continue;
+        }
         final dueDate = DateTime.parse(
           row[Dbhelper.colTranPaymentDueAt] as String,
         );

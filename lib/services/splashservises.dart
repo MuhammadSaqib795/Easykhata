@@ -10,7 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class Splashservises {
-  static const Duration _minimumSplash = Duration(milliseconds: 1000);
+  static const Duration _minimumSplash = Duration(milliseconds: 600);
 
   /// Shows the splash just long enough for the local database to load, so the
   /// next screen opens fully ready (no second loading screen, no white flash).
