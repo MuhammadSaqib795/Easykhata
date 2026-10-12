@@ -1,0 +1,7 @@
+// Google Sign-In for iOS (needed for Google login and Google Drive backup).
+// Copy both values from ios/Runner/GoogleService-Info.plist
+// (download it from Firebase Console > Project settings > your iOS app):
+//   CLIENT_ID          -> GOOGLE_IOS_CLIENT_ID
+//   REVERSED_CLIENT_ID -> GOOGLE_REVERSED_CLIENT_ID
+GOOGLE_IOS_CLIENT_ID = REPLACE_WITH_CLIENT_ID.apps.googleusercontent.com
+GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.REPLACE_WITH_CLIENT_ID

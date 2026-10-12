@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Single solid colour: matches the Android 12+ system splash and the first
+     Flutter frame, so only one splash is ever visible. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#FF0F172A" />
+        </shape>
+    </item>
+</layer-list>

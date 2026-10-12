@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- LIGHT / DEFAULT THEME -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
+
+        <!-- Your Flutter gradient splash -->
+        <item name="android:windowBackground">@drawable/launch_background</item>
+
+        <!-- Android 12+ splash background (MUST be color, not drawable) -->
+        <item name="android:windowSplashScreenBackground">#0F172A</item>
+
+        <!-- No icon flicker -->
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon_transparent</item>
+
+        <!-- Remove animation delay -->
+        <item name="android:windowSplashScreenAnimationDuration">0</item>
+
+        <!-- Prevent preview flash (IMPORTANT FIX) -->
+        <item name="android:windowDisablePreview">false</item>
+
+    </style>
+
+
+    <!-- NORMAL APP THEME -->
+    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+
+        <!-- After Flutter loads -->
+        <item name="android:windowBackground">@drawable/launch_background</item>
+
+    </style>
+
+</resources>

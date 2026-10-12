@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "36925261827",
+    "project_id": "digital-khata-a6163",
+    "storage_bucket": "digital-khata-a6163.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:36925261827:android:9aa6315e4759c968746636",
+        "android_client_info": {
+          "package_name": "com.devcastle.digitalkhata"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "36925261827-5f8nhvmvb2jtli6k7thrbhit1mlm2n09.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.devcastle.digitalkhata",
+            "certificate_hash": "a91a4548e8b9e1019e86a418b0a54bed9f25cc04"
+          }
+        },
+        {
+          "client_id": "36925261827-ilde73okhhgkdmj6spm1j6tqkundcelm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC_T9nrPrznTlibu066sjRYw8oXrJuS9Yk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "36925261827-ilde73okhhgkdmj6spm1j6tqkundcelm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
