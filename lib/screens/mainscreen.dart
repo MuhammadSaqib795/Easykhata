@@ -2,23 +2,21 @@ import 'dart:async';
 
 import 'package:digitalkhata/customerpagedaa.dart';
 import 'package:digitalkhata/db/dbprovider.dart';
-import 'package:digitalkhata/services/auto_sync_service.dart';
 import 'package:digitalkhata/screens/backup_screen.dart';
-import 'package:digitalkhata/screens/payment_reminder_settings_screen.dart';
+import 'package:digitalkhata/screens/sales_history_screen.dart';
+import 'package:digitalkhata/services/auto_sync_service.dart';
 import 'package:digitalkhata/services/payment_reminder_service.dart';
+import 'package:digitalkhata/tabs/pos_tab.dart';
+import 'package:digitalkhata/tabs/settings_tab.dart';
 import 'package:digitalkhata/tabs/tab1/customer_details.dart';
 import 'package:digitalkhata/tabs/tab1/tab1.dart';
 import 'package:digitalkhata/theme/app_theme.dart';
 import 'package:digitalkhata/widgets/backup_frequency_picker.dart';
-import 'package:digitalkhata/widgets/brand.dart';
-import 'package:digitalkhata/utills/format.dart';
 import 'package:digitalkhata/widgets/empty_state.dart';
-import 'package:digitalkhata/widgets/logoutbutton.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+/// Home of the app: three tabs (Khata, POS, Settings) under one app bar.
 class Mainscreen extends StatefulWidget {
   const Mainscreen({super.key});
 
@@ -26,17 +24,17 @@ class Mainscreen extends StatefulWidget {
   State<Mainscreen> createState() => _MainscreenState();
 }
 
-class _MainscreenState extends State<Mainscreen>
-    with SingleTickerProviderStateMixin {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  late TabController _tabController;
+class _MainscreenState extends State<Mainscreen> {
+  static const _khata = 0;
+  static const _pos = 1;
+
+  int _tab = _khata;
   final ValueNotifier<int?> _reminderTap =
       PaymentReminderService.instance.tappedTransactionId;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 1, vsync: this);
     _reminderTap.addListener(_openTappedReminder);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_startAutoSyncAfterInitialization());
@@ -142,27 +140,14 @@ class _MainscreenState extends State<Mainscreen>
   @override
   void dispose() {
     _reminderTap.removeListener(_openTappedReminder);
-    _tabController.dispose();
     super.dispose();
   }
 
-  void _openBackup() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const BackupScreen()),
-    );
+  void _open(Widget screen) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
   }
 
-  void _openPaymentReminders() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const PaymentReminderSettingsScreen(),
-      ),
-    );
-  }
-
-  /// Drive full / almost full / not connected: shown above the lists.
+  /// Drive full / almost full / not connected: shown above the tabs.
   Widget _backupBanner(AutoSyncService sync) {
     final (IconData icon, Color bg, Color fg, String text, String action)?
     b = switch (sync.status) {
@@ -198,99 +183,20 @@ class _MainscreenState extends State<Mainscreen>
     };
     if (b == null) return const SizedBox.shrink();
     final (icon, bg, fg, text, action) = b;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: fg.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: fg, size: 22),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(fontSize: 13, height: 1.35, color: fg),
-            ),
-          ),
-          TextButton(
-            onPressed: _openBackup,
-            style: TextButton.styleFrom(foregroundColor: fg),
-            child: Text(
-              action,
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ================= AUTO-SYNC STATUS =================
-  Widget _syncIcon(AutoSyncService sync) {
-    final Widget icon = switch (sync.status) {
-      SyncStatus.syncing => SizedBox(
-        width: 18,
-        height: 18,
-        child: CircularProgressIndicator(
-          value: sync.progress,
-          strokeWidth: 2.4,
-          color: Colors.white,
-          backgroundColor: Colors.white24,
-        ),
-      ),
-      SyncStatus.idle => const Icon(
-        Icons.cloud_done,
-        key: ValueKey('sync-idle'),
-        color: Colors.white,
-        size: 20,
-      ),
-      SyncStatus.pending => const Icon(
-        Icons.cloud_upload,
-        key: ValueKey('sync-pending'),
-        color: Colors.amber,
-        size: 20,
-      ),
-      SyncStatus.offline => const Icon(
-        Icons.cloud_off,
-        key: ValueKey('sync-offline'),
-        color: Colors.amber,
-        size: 20,
-      ),
-      SyncStatus.needsReLogin ||
-      SyncStatus.needsDriveConnection ||
-      SyncStatus.needsPermission ||
-      SyncStatus.driveFull ||
-      SyncStatus.error => const Icon(
-        Icons.sync_problem,
-        key: ValueKey('sync-problem'),
-        color: Colors.redAccent,
-        size: 20,
-      ),
-      SyncStatus.disabled => const Icon(
-        Icons.cloud_off,
-        key: ValueKey('sync-disabled'),
-        color: Colors.white38,
-        size: 20,
-      ),
-    };
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 220),
-      transitionBuilder: (child, animation) => FadeTransition(
-        opacity: animation,
-        child: ScaleTransition(scale: animation, child: child),
-      ),
-      child: icon,
+    return _Banner(
+      icon: icon,
+      background: bg,
+      foreground: fg,
+      text: text,
+      actionLabel: action,
+      onAction: () => _open(const BackupScreen()),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     // Watch only what this screen shows. Saving an entry changes none of
-    // these, so the whole main screen is no longer rebuilt behind every save.
+    // these, so the whole main screen is not rebuilt behind every save.
     final (loading, loadError, operationError, sync) = context
         .select<Dbprovider, (bool, String?, String?, AutoSyncService?)>(
           (db) => (
@@ -318,368 +224,136 @@ class _MainscreenState extends State<Mainscreen>
       );
     }
 
-    final user = _auth.currentUser;
-    final firstName = (user?.displayName ?? '')
-        .trim()
-        .split(RegExp(r'\s+'))
-        .first;
-    final greeting = firstName.isEmpty ? 'Your khata' : 'Hello, $firstName';
-
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
-      child: Scaffold(
-        body: NestedScrollView(
-          headerSliverBuilder: (context, _) => [
-            SliverToBoxAdapter(
-              child: _Header(
-                greeting: greeting,
-                email: user?.email ?? '',
-                trailing: [
-                  IconButton(
-                    icon: const Icon(Icons.notifications_active_outlined),
-                    tooltip: 'Payment reminders',
-                    onPressed: _openPaymentReminders,
-                  ),
-                  if (sync != null)
-                    ListenableBuilder(
-                      listenable: sync,
-                      builder: (context, _) => IconButton(
-                        icon: _syncIcon(sync),
-                        tooltip: 'Backup',
-                        onPressed: _openBackup,
-                      ),
-                    ),
-                  Logoutbutton(onBackup: _openBackup),
-                ],
-              ),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(const [AppBrand.name, 'Point of sale', 'Settings'][_tab]),
+        actions: [
+          if (_tab == _pos)
+            IconButton(
+              tooltip: 'Sales history',
+              icon: const Icon(Icons.receipt_long_outlined),
+              onPressed: () => _open(const SalesHistoryScreen()),
             ),
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: _TabBarDelegate(
-                TabBar(
-                  controller: _tabController,
-                  dividerColor: Colors.transparent,
-                  indicatorSize: TabBarIndicatorSize.tab,
-                  indicator: BoxDecoration(
-                    color: AppColors.navy,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  labelColor: Colors.white,
-                  unselectedLabelColor: AppColors.muted,
-                  labelStyle: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  splashBorderRadius: BorderRadius.circular(12),
-                  tabs: const [Tab(text: 'Customers')],
-                ),
-              ),
-            ),
-          ],
-          body: Column(
-            children: [
-              if (operationError != null)
-                Container(
-                  margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                  padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFEF2F2),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.error_outline,
-                        color: AppColors.payable,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          operationError,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.payable,
-                          ),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: context
-                            .read<Dbprovider>()
-                            .clearOperationError,
-                        child: const Text('Dismiss'),
-                      ),
-                    ],
-                  ),
-                ),
-              if (sync != null)
-                ListenableBuilder(
-                  listenable: sync,
-                  builder: (context, _) => _backupBanner(sync),
-                ),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: const [Tab1()],
-                ),
-              ),
-            ],
-          ),
-        ),
-        floatingActionButton: _buildFAB(),
+          const SizedBox(width: 4),
+        ],
       ),
-    );
-  }
-
-  Widget _buildFAB() {
-    return FloatingActionButton.extended(
-      backgroundColor: AppColors.navy,
-      foregroundColor: Colors.white,
-      elevation: 2,
-      onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const AddCustomerPage()),
-        );
-      },
-      icon: const Icon(Icons.add_rounded),
-      label: const Text(
-        'Add customer',
-        style: TextStyle(fontWeight: FontWeight.w700),
-      ),
-    );
-  }
-}
-
-/// Navy header: brand, account actions, greeting and the summary of the
-/// selected tab.
-class _Header extends StatelessWidget {
-  const _Header({
-    required this.greeting,
-    required this.email,
-    required this.trailing,
-  });
-
-  final String greeting;
-  final String email;
-  final List<Widget> trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final top = MediaQuery.paddingOf(context).top;
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF18263D), AppColors.navy, Color(0xFF0B1220)],
-          ),
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              right: -46,
-              top: top + 18,
-              child: _HeaderOrb(size: 150, opacity: 0.045),
-            ),
-            Positioned(
-              right: 72,
-              bottom: -78,
-              child: _HeaderOrb(size: 138, opacity: 0.035),
-            ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(16, top + 8, 8, 22),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const BrandLockup(logoSize: 32, fontSize: 18),
-                      const Spacer(),
-                      ...trailing,
-                    ],
-                  ),
-                  const SizedBox(height: 22),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Text(
-                      greeting,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.6,
-                      ),
-                    ),
-                  ),
-                  if (email.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      email,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.62),
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 18),
-                  const _Summary(),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HeaderOrb extends StatelessWidget {
-  const _HeaderOrb({required this.size, required this.opacity});
-
-  final double size;
-  final double opacity;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      border: Border.all(
-        color: Colors.white.withValues(alpha: opacity),
-        width: 1.2,
-      ),
-      color: Colors.white.withValues(alpha: opacity * 0.45),
-    ),
-  );
-}
-
-/// Customer totals from the provider's existing figures.
-class _Summary extends StatelessWidget {
-  const _Summary();
-
-  @override
-  Widget build(BuildContext context) {
-    final (a, b, count) = context.select<Dbprovider, (double, double, int)>(
-      (db) => (db.customerToReceive, db.customerToPay, db.allCustomers.length),
-    );
-    final stats = <(String, String, Color)>[
-      ('TO RECEIVE', formatMoney(a), const Color(0xFF86EFAC)),
-      ('TO PAY', formatMoney(b), const Color(0xFFFCA5A5)),
-      ('Customers', '$count', Colors.white),
-    ];
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.085),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.13)),
-      ),
-      child: Row(
+      body: Column(
         children: [
-          for (var i = 0; i < stats.length; i++) ...[
-            if (i > 0)
-              Container(
-                width: 1,
-                height: 34,
-                color: Colors.white.withValues(alpha: 0.1),
-              ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      stats[i].$1,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.6),
-                        fontSize: 10.5,
-                        letterSpacing: 0.7,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 280),
-                        transitionBuilder: (child, animation) => FadeTransition(
-                          opacity: animation,
-                          child: SlideTransition(
-                            position: Tween<Offset>(
-                              begin: const Offset(0, 0.18),
-                              end: Offset.zero,
-                            ).animate(animation),
-                            child: child,
-                          ),
-                        ),
-                        child: Text(
-                          stats[i].$2,
-                          key: ValueKey('${stats[i].$1}-${stats[i].$2}'),
-                          style: TextStyle(
-                            color: stats[i].$3,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+          if (operationError != null)
+            _Banner(
+              icon: Icons.error_outline,
+              background: const Color(0xFFFEF2F2),
+              foreground: AppColors.payable,
+              text: operationError,
+              actionLabel: 'Dismiss',
+              onAction: context.read<Dbprovider>().clearOperationError,
             ),
-          ],
+          if (sync != null)
+            ListenableBuilder(
+              listenable: sync,
+              builder: (context, _) => _backupBanner(sync),
+            ),
+          Expanded(
+            // Keeps every tab alive, so a half-built sale or a search is
+            // still there after a look at another tab.
+            child: IndexedStack(
+              index: _tab,
+              children: const [Tab1(), PosTab(), SettingsTab()],
+            ),
+          ),
+        ],
+      ),
+      floatingActionButton: _tab == _khata
+          ? FloatingActionButton.extended(
+              backgroundColor: AppColors.navy,
+              foregroundColor: Colors.white,
+              elevation: 2,
+              onPressed: () => _open(const AddCustomerPage()),
+              icon: const Icon(Icons.person_add_alt_1_rounded),
+              label: const Text(
+                'Add customer',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            )
+          : null,
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tab,
+        backgroundColor: Colors.white,
+        indicatorColor: AppColors.navy.withValues(alpha: 0.1),
+        onDestinationSelected: (index) {
+          FocusManager.instance.primaryFocus?.unfocus();
+          setState(() => _tab = index);
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.menu_book_outlined),
+            selectedIcon: Icon(Icons.menu_book_rounded),
+            label: 'Khata',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.point_of_sale_outlined),
+            selectedIcon: Icon(Icons.point_of_sale_rounded),
+            label: 'POS',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings_rounded),
+            label: 'Settings',
+          ),
         ],
       ),
     );
   }
 }
 
-class _TabBarDelegate extends SliverPersistentHeaderDelegate {
-  _TabBarDelegate(this.tabBar);
+/// One-line notice with a single action, shown above the tabs.
+class _Banner extends StatelessWidget {
+  const _Banner({
+    required this.icon,
+    required this.background,
+    required this.foreground,
+    required this.text,
+    required this.actionLabel,
+    required this.onAction,
+  });
 
-  final TabBar tabBar;
-  static const double _vPad = 10;
+  final IconData icon;
+  final Color background;
+  final Color foreground;
+  final String text;
+  final String actionLabel;
+  final VoidCallback onAction;
 
   @override
-  double get minExtent => tabBar.preferredSize.height + _vPad * 2 + 8;
-  @override
-  double get maxExtent => tabBar.preferredSize.height + _vPad * 2 + 8;
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
+  Widget build(BuildContext context) {
     return Container(
-      color: AppColors.surface,
-      padding: const EdgeInsets.fromLTRB(16, _vPad, 16, _vPad),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border),
-        ),
-        padding: const EdgeInsets.all(3),
-        child: tabBar,
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: foreground.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: foreground, size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 13, height: 1.35, color: foreground),
+            ),
+          ),
+          TextButton(
+            onPressed: onAction,
+            style: TextButton.styleFrom(foregroundColor: foreground),
+            child: Text(
+              actionLabel,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
       ),
     );
   }
-
-  @override
-  bool shouldRebuild(_TabBarDelegate oldDelegate) =>
-      oldDelegate.tabBar != tabBar;
 }

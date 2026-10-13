@@ -6,6 +6,7 @@ import 'package:digitalkhata/db/khata_guard.dart';
 export 'package:digitalkhata/db/khata_guard.dart'
     show KhataNotSettledException, isSettled;
 import 'package:digitalkhata/model/customermodel.dart';
+import 'package:digitalkhata/model/pos_models.dart';
 import 'package:digitalkhata/model/transactionmodel.dart';
 import 'package:digitalkhata/services/auto_sync_service.dart';
 import 'package:digitalkhata/services/cloud_services.dart';
@@ -37,6 +38,10 @@ class Dbprovider extends ChangeNotifier {
   // --- Data Lists ---
   List<Customermodel> _allcustomers = [];
   List<TransactionModel> _customerTransactions = [];
+  List<Product> _products = [];
+
+  /// Products of the point of sale, A to Z.
+  List<Product> get products => _products;
 
   // --- Getters ---
   List<Customermodel> get allCustomers => _allcustomers;
@@ -142,6 +147,7 @@ class Dbprovider extends ChangeNotifier {
   void _clearLoadedData() {
     _allcustomers = [];
     _customerTransactions = [];
+    _products = [];
     _customerTransactionsOwner = null;
     _calculateStats();
     _isLoadingInitialData = true;
@@ -166,6 +172,7 @@ class Dbprovider extends ChangeNotifier {
           .map((row) => Customermodel.fromMap(row))
           .toList();
       _calculateStats();
+      await _loadProducts(db);
       // Not awaited: this talks to the OS once per reminder, and waiting for
       // it kept the splash screen up long after the data was ready.
       unawaited(_restoreReminders(db));
@@ -261,6 +268,176 @@ class Dbprovider extends ChangeNotifier {
     _authSub?.cancel();
     _autoSync?.dispose();
     super.dispose();
+  }
+
+  // ==========================================
+  // POINT OF SALE
+  // ==========================================
+
+  Future<void> _loadProducts(DatabaseExecutor db) async {
+    final rows = await db.query(
+      Dbhelper.tableProducts,
+      orderBy: '${Dbhelper.colProductName} COLLATE NOCASE',
+    );
+    _products = rows.map(Product.fromMap).toList();
+  }
+
+  /// Adds a product, or changes the one with [id]. Returns whether it saved.
+  Future<bool> saveProduct({
+    int? id,
+    required String name,
+    required double price,
+  }) async {
+    try {
+      final db = await dbhelper.getDB();
+      final values = {
+        Dbhelper.colProductName: name,
+        Dbhelper.colProductPrice: price,
+      };
+      if (id == null) {
+        await db.insert(Dbhelper.tableProducts, values);
+      } else {
+        await db.update(
+          Dbhelper.tableProducts,
+          values,
+          where: '${Dbhelper.colProductId} = ?',
+          whereArgs: [id],
+        );
+      }
+      _autoSync?.markDirty();
+      await _loadProducts(db);
+      notifyListeners();
+      return true;
+    } catch (error, stackTrace) {
+      debugPrint('Saving product failed: $error\n$stackTrace');
+      return false;
+    }
+  }
+
+  /// Removes a product from the list. Past sales keep their own item lines.
+  Future<bool> deleteProduct(int id) async {
+    try {
+      final db = await dbhelper.getDB();
+      await db.delete(
+        Dbhelper.tableProducts,
+        where: '${Dbhelper.colProductId} = ?',
+        whereArgs: [id],
+      );
+      _autoSync?.markDirty();
+      await _loadProducts(db);
+      notifyListeners();
+      return true;
+    } catch (error, stackTrace) {
+      debugPrint('Deleting product failed: $error\n$stackTrace');
+      return false;
+    }
+  }
+
+  /// Saves a sale. With [customer] the total is not paid now: it is written
+  /// onto that customer's khata as a "Gave" entry in the same DB transaction,
+  /// so the sale and the balance can never disagree. Returns whether it saved.
+  Future<bool> recordSale(
+    List<SaleLine> lines, {
+    Customermodel? customer,
+  }) async {
+    final total = lines.fold<double>(0, (sum, line) => sum + line.total);
+    final customerId = customer?.id;
+    if (lines.isEmpty || total <= 0) return false;
+    if (customer != null && customerId == null) return false;
+
+    try {
+      final db = await dbhelper.getDB();
+      final now = DateTime.now();
+      await db.transaction((txn) async {
+        final saleId = await txn.insert(Dbhelper.tableSales, {
+          Dbhelper.colSaleTime: now.toIso8601String(),
+          Dbhelper.colSaleTotal: total,
+          Dbhelper.colSalePayment: customer == null
+              ? Sale.paymentCash
+              : Sale.paymentKhata,
+          Dbhelper.colSaleCustomerId: customerId,
+          Dbhelper.colSaleCustomerName: customer?.name,
+        });
+        for (final line in lines) {
+          await txn.insert(Dbhelper.tableSaleItems, {
+            Dbhelper.colSaleItemSaleId: saleId,
+            Dbhelper.colSaleItemName: line.name,
+            Dbhelper.colSaleItemPrice: line.price,
+            Dbhelper.colSaleItemQty: line.qty,
+          });
+        }
+        if (customerId != null) {
+          await txn.insert(
+            Dbhelper.tableTrans,
+            TransactionModel(
+              customerId: customerId,
+              amount: total,
+              type: 'Gave',
+              desp: 'POS sale #$saleId',
+              dateTime: now,
+            ).toMap(),
+          );
+          await txn.rawUpdate(
+            'UPDATE ${Dbhelper.tableCus} SET '
+            '${Dbhelper.colCustomerCurrentBalance} = '
+            '${Dbhelper.colCustomerCurrentBalance} + ? '
+            'WHERE ${Dbhelper.colCustomerId} = ?',
+            [total, customerId],
+          );
+        }
+      });
+
+      _autoSync?.markDirty();
+      if (customerId != null) {
+        await _syncCustomerReminders(db, customerId);
+        await _refreshCustomer(db, customerId);
+        if (_customerTransactionsOwner == customerId) {
+          await _loadCustomerTransactions(db, customerId);
+        }
+      }
+      notifyListeners();
+      return true;
+    } catch (error, stackTrace) {
+      debugPrint('Saving sale failed: $error\n$stackTrace');
+      return false;
+    }
+  }
+
+  /// The latest sales, newest first, each with its item lines.
+  Future<List<Sale>> salesHistory({int limit = 300}) async {
+    final db = await dbhelper.getDB();
+    final saleRows = await db.query(
+      Dbhelper.tableSales,
+      orderBy: '${Dbhelper.colSaleTime} DESC, ${Dbhelper.colSaleId} DESC',
+      limit: limit,
+    );
+    if (saleRows.isEmpty) return const [];
+    final ids = saleRows.map((row) => row[Dbhelper.colSaleId] as int).toList();
+    final itemRows = await db.query(
+      Dbhelper.tableSaleItems,
+      where:
+          '${Dbhelper.colSaleItemSaleId} IN '
+          '(${List.filled(ids.length, '?').join(',')})',
+      whereArgs: ids,
+      orderBy: Dbhelper.colSaleItemId,
+    );
+    final linesBySale = <int, List<SaleLine>>{};
+    for (final row in itemRows) {
+      linesBySale
+          .putIfAbsent(row[Dbhelper.colSaleItemSaleId] as int, () => [])
+          .add(SaleLine.fromMap(row));
+    }
+    return [
+      for (final row in saleRows)
+        Sale(
+          id: row[Dbhelper.colSaleId] as int,
+          time: DateTime.parse(row[Dbhelper.colSaleTime] as String),
+          total: (row[Dbhelper.colSaleTotal] as num).toDouble(),
+          onKhata: row[Dbhelper.colSalePayment] == Sale.paymentKhata,
+          customerName: row[Dbhelper.colSaleCustomerName] as String?,
+          lines: linesBySale[row[Dbhelper.colSaleId]] ?? const [],
+        ),
+    ];
   }
 
   // ==========================================

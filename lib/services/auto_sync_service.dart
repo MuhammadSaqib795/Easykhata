@@ -1228,6 +1228,9 @@ class AutoSyncService extends ChangeNotifier with WidgetsBindingObserver {
       final tables = <(String, String)>[
         (Dbhelper.tableCus, Dbhelper.colCustomerId),
         (Dbhelper.tableTrans, Dbhelper.colTransId),
+        (Dbhelper.tableProducts, Dbhelper.colProductId),
+        (Dbhelper.tableSales, Dbhelper.colSaleId),
+        (Dbhelper.tableSaleItems, Dbhelper.colSaleItemId),
       ];
       final result = <String, List<Map<String, Object?>>>{};
       for (final (table, primaryKey) in tables) {

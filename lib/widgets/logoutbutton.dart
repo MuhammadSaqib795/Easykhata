@@ -14,7 +14,7 @@ class Logoutbutton extends StatelessWidget {
 
   /// Stops this user's backup, closes their data, then signs out. The next
   /// login decides the next backup owner.
-  Future<void> _logout(BuildContext context) async {
+  static Future<void> logout(BuildContext context) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -80,7 +80,7 @@ class Logoutbutton extends StatelessWidget {
       tooltip: 'Account',
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       onSelected: (value) {
-        if (value == 'logout') _logout(context);
+        if (value == 'logout') logout(context);
         if (value == 'backup') onBackup?.call();
       },
       icon: Container(

@@ -33,7 +33,29 @@ class Dbhelper {
   /// Shared database of app versions without per-user databases. It is
   /// handed over once to the first user who logs in afterwards.
   static const String legacyDbFileName = "DigitalKhata_Active.db";
-  static const int databaseVersion = 6;
+  static const int databaseVersion = 7;
+
+  // Point of sale. A sale keeps its own copy of each item's name and price,
+  // so editing or deleting a product never changes past sales.
+  static const String tableProducts = "products";
+  static const String colProductId = "id";
+  static const String colProductName = "name";
+  static const String colProductPrice = "price";
+
+  static const String tableSales = "sales";
+  static const String colSaleId = "id";
+  static const String colSaleTime = "time";
+  static const String colSaleTotal = "total";
+  static const String colSalePayment = "payment";
+  static const String colSaleCustomerId = "customerId";
+  static const String colSaleCustomerName = "customerName";
+
+  static const String tableSaleItems = "sale_items";
+  static const String colSaleItemId = "id";
+  static const String colSaleItemSaleId = "saleId";
+  static const String colSaleItemName = "name";
+  static const String colSaleItemPrice = "price";
+  static const String colSaleItemQty = "qty";
 
   /// Raised by the database itself when a customer with a remaining balance
   /// is about to be deleted (see [_createSettlementLocks]).
@@ -154,6 +176,8 @@ class Dbhelper {
           await _addPaymentDueDate(db);
         case 6:
           await _addPaymentDueMinute(db);
+        case 7:
+          await _createPosTables(db);
         default:
           throw StateError(
             'No database migration is defined for version ${version + 1}.',
@@ -203,6 +227,44 @@ class Dbhelper {
   static Future<void> _createTables(Database db) async {
     await _createCustomerTable(db);
     await _createTransactionTable(db);
+    await _createPosTables(db);
+  }
+
+  static Future<void> _createPosTables(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tableProducts(
+        $colProductId INTEGER PRIMARY KEY AUTOINCREMENT,
+        $colProductName TEXT NOT NULL,
+        $colProductPrice REAL NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tableSales(
+        $colSaleId INTEGER PRIMARY KEY AUTOINCREMENT,
+        $colSaleTime TEXT NOT NULL,
+        $colSaleTotal REAL NOT NULL,
+        $colSalePayment TEXT NOT NULL,
+        $colSaleCustomerId INTEGER,
+        $colSaleCustomerName TEXT,
+        FOREIGN KEY($colSaleCustomerId) REFERENCES $tableCus($colCustomerId)
+          ON DELETE SET NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tableSaleItems(
+        $colSaleItemId INTEGER PRIMARY KEY AUTOINCREMENT,
+        $colSaleItemSaleId INTEGER NOT NULL,
+        $colSaleItemName TEXT NOT NULL,
+        $colSaleItemPrice REAL NOT NULL,
+        $colSaleItemQty INTEGER NOT NULL,
+        FOREIGN KEY($colSaleItemSaleId) REFERENCES $tableSales($colSaleId)
+          ON DELETE CASCADE
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sale_items_sale '
+      'ON $tableSaleItems ($colSaleItemSaleId)',
+    );
   }
 
   /// Drops supplier/community records and supplier-only transaction history.
