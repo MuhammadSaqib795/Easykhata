@@ -89,7 +89,7 @@ class SettingsTab extends StatelessWidget {
             ],
           ),
         ),
-        const _SectionLabel('KHATA'),
+        const _SectionLabel('REMINDERS'),
         _Group(
           children: [
             _SettingTile(
@@ -111,7 +111,7 @@ class SettingsTab extends StatelessWidget {
             ),
           ],
         ),
-        const _SectionLabel('DATA'),
+        const _SectionLabel('BACKUP'),
         _Group(
           children: [
             if (sync == null)
@@ -142,6 +142,22 @@ class SettingsTab extends StatelessWidget {
               subtitle: 'Your data stays on this phone and in your backup',
               color: AppColors.payable,
               onTap: () => Logoutbutton.logout(context),
+            ),
+          ],
+        ),
+        const _SectionLabel('ABOUT'),
+        _Group(
+          children: [
+            _SettingTile(
+              icon: Icons.info_outline_rounded,
+              title: 'About ${AppBrand.name}',
+              subtitle: AppBrand.tagline,
+              onTap: () => showAboutDialog(
+                context: context,
+                applicationName: AppBrand.name,
+                applicationVersion: '1.0.0',
+                applicationLegalese: AppBrand.tagline,
+              ),
             ),
           ],
         ),

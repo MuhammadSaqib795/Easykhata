@@ -2,11 +2,13 @@ import 'package:digitalkhata/db/dbprovider.dart';
 import 'package:digitalkhata/model/pos_models.dart';
 import 'package:digitalkhata/theme/app_theme.dart';
 import 'package:digitalkhata/utills/format.dart';
+import 'package:digitalkhata/widgets/app_widgets.dart';
 import 'package:digitalkhata/widgets/empty_state.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-/// Every sale made in the POS tab, newest first, with today's total on top.
+/// Every sale made in the Sale tab, newest first, grouped by day with each
+/// day's total.
 class SalesHistoryScreen extends StatefulWidget {
   const SalesHistoryScreen({super.key});
 
@@ -15,12 +17,24 @@ class SalesHistoryScreen extends StatefulWidget {
 }
 
 class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
-  late final Future<List<Sale>> _sales;
+  late Future<List<Sale>> _sales;
 
   @override
   void initState() {
     super.initState();
     _sales = context.read<Dbprovider>().salesHistory();
+  }
+
+  void _reload() =>
+      setState(() => _sales = context.read<Dbprovider>().salesHistory());
+
+  static String _dayLabel(DateTime day) {
+    final now = DateTime.now();
+    if (DateUtils.isSameDay(day, now)) return 'Today';
+    if (DateUtils.isSameDay(day, now.subtract(const Duration(days: 1)))) {
+      return 'Yesterday';
+    }
+    return formatDate(day);
   }
 
   @override
@@ -30,69 +44,62 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
       body: FutureBuilder<List<Sale>>(
         future: _sales,
         builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return const EmptyState(
-              icon: Icons.error_outline_rounded,
-              title: 'Sales could not be loaded',
-              message: 'Go back and open this screen again.',
-            );
-          }
+          if (snapshot.hasError) return ErrorView(onRetry: _reload);
           final sales = snapshot.data;
-          if (sales == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
+          if (sales == null) return const LoadingView();
           if (sales.isEmpty) {
             return const EmptyState(
               icon: Icons.receipt_long_outlined,
               title: 'No sales yet',
-              message: 'Sales you save in the POS tab appear here.',
+              message: 'Sales you save in the Sale tab appear here.',
             );
           }
 
-          final today = [
-            for (final sale in sales)
-              if (DateUtils.isSameDay(sale.time, DateTime.now())) sale,
-          ];
-          final todayTotal = today.fold<double>(0, (sum, s) => sum + s.total);
+          // Newest first, so sales of one day are next to each other.
+          final rows = <Object>[];
+          for (var i = 0; i < sales.length; i++) {
+            if (i == 0 || !DateUtils.isSameDay(sales[i - 1].time, sales[i].time)) {
+              final total = sales
+                  .where((s) => DateUtils.isSameDay(s.time, sales[i].time))
+                  .fold<double>(0, (sum, s) => sum + s.total);
+              rows.add((sales[i].time, total));
+            }
+            rows.add(sales[i]);
+          }
 
-          return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-            itemCount: sales.length + 1,
-            itemBuilder: (context, i) {
-              if (i == 0) {
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: AppColors.navy,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Today · ${today.length} '
-                        '${today.length == 1 ? 'sale' : 'sales'}',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.7),
-                          fontSize: 13,
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                itemCount: rows.length,
+                itemBuilder: (context, i) {
+                  final row = rows[i];
+                  if (row is Sale) return _SaleCard(sale: row);
+                  final (DateTime day, double total) = row as (DateTime, double);
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(2, 16, 2, 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _dayLabel(day),
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        formatMoney(todayTotal),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 26,
-                          fontWeight: FontWeight.w800,
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 160),
+                          child: AmountText(total, size: 15),
                         ),
-                      ),
-                    ],
-                  ),
-                );
-              }
-              return _SaleCard(sale: sales[i - 1]);
-            },
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
           );
         },
       ),
@@ -107,7 +114,7 @@ class _SaleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = sale.onKhata ? AppColors.accent : AppColors.receivable;
+    final color = sale.onKhata ? AppColors.dueSoon : AppColors.receivable;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       clipBehavior: Clip.antiAlias,
@@ -123,23 +130,18 @@ class _SaleCard extends StatelessWidget {
           leading: CircleAvatar(
             backgroundColor: color.withValues(alpha: 0.12),
             child: Icon(
-              sale.onKhata
-                  ? Icons.menu_book_outlined
-                  : Icons.payments_outlined,
+              sale.onKhata ? Icons.menu_book_outlined : Icons.payments_outlined,
               color: color,
               size: 20,
             ),
           ),
-          title: Text(
-            formatMoney(sale.total),
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              color: AppColors.ink,
-            ),
+          title: Align(
+            alignment: Alignment.centerLeft,
+            child: AmountText(sale.total, size: 16, align: Alignment.centerLeft),
           ),
           subtitle: Text(
             '${sale.onKhata ? 'Khata · ${sale.customerName ?? 'Customer'}' : 'Cash'}'
-            '\n${formatDateTime(sale.time)}',
+            ' · ${formatDateTime(sale.time).split(', ').last}',
             style: const TextStyle(color: AppColors.muted, fontSize: 12.5),
           ),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -157,9 +159,9 @@ class _SaleCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Text(
-                      formatMoney(line.total),
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 120),
+                      child: AmountText(line.total, size: 14),
                     ),
                   ],
                 ),

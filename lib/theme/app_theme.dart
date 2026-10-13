@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// Easy Khata brand and semantic colours. Financial meaning is always
 /// carried by the same two colours: [receivable] (you will get) and
@@ -18,6 +19,9 @@ abstract final class AppColors {
   static const payable = Color(0xFFB91C1C);
   static const settled = Color(0xFF475569);
 
+  /// Due within a few days: neither fine nor overdue yet.
+  static const dueSoon = Color(0xFFB45309);
+
   /// Colour for a balance using the app convention (> 0 receive, < 0 pay).
   static Color forBalance(double balance) =>
       balance > 0 ? receivable : (balance < 0 ? payable : settled);
@@ -29,7 +33,33 @@ abstract final class AppBrand {
   static const logoAsset = 'assets/images/easy_khata_logo.png';
 }
 
+/// 8px spacing grid.
+abstract final class AppSpace {
+  static const double xs = 4;
+  static const double sm = 8;
+  static const double md = 16;
+  static const double lg = 24;
+  static const double xl = 32;
+
+  /// Width from which the app uses a side rail and two panes.
+  static const double wide = 700;
+}
+
 abstract final class AppTheme {
+  /// Dark palette. The screens still use fixed light surfaces, so the app
+  /// stays on [light] until they are moved to theme colours.
+  static ThemeData dark() {
+    final base = ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: AppColors.navy,
+        brightness: Brightness.dark,
+      ),
+    );
+    return base.copyWith(textTheme: GoogleFonts.interTextTheme(base.textTheme));
+  }
+
   static ThemeData light() {
     final scheme = ColorScheme.fromSeed(
       seedColor: AppColors.navy,
@@ -47,9 +77,43 @@ abstract final class AppTheme {
     final radius = BorderRadius.circular(14);
 
     return base.copyWith(
-      textTheme: base.textTheme.apply(
-        bodyColor: AppColors.ink,
-        displayColor: AppColors.ink,
+      textTheme: GoogleFonts.interTextTheme(
+        base.textTheme.apply(
+          bodyColor: AppColors.ink,
+          displayColor: AppColors.ink,
+        ),
+      ),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        },
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        height: 68,
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: AppColors.navy.withValues(alpha: 0.1),
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (s) => TextStyle(
+            fontSize: 12,
+            fontWeight: s.contains(WidgetState.selected)
+                ? FontWeight.w800
+                : FontWeight.w500,
+            color: s.contains(WidgetState.selected)
+                ? AppColors.navy
+                : AppColors.muted,
+          ),
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(99)),
+        side: const BorderSide(color: AppColors.border),
+        backgroundColor: Colors.white,
+        selectedColor: AppColors.navy,
+        showCheckmark: false,
+        labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+        secondaryLabelStyle: const TextStyle(color: Colors.white),
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: AppColors.navy,

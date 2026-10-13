@@ -7,6 +7,7 @@ export 'package:digitalkhata/db/khata_guard.dart'
     show KhataNotSettledException, isSettled;
 import 'package:digitalkhata/model/customermodel.dart';
 import 'package:digitalkhata/model/pos_models.dart';
+import 'package:digitalkhata/model/return_item.dart';
 import 'package:digitalkhata/model/transactionmodel.dart';
 import 'package:digitalkhata/services/auto_sync_service.dart';
 import 'package:digitalkhata/services/cloud_services.dart';
@@ -649,6 +650,53 @@ class Dbprovider extends ChangeNotifier {
           DateUtils.isSameDay(saved.paymentDueDate, dueDate) &&
           saved.paymentDueMinute == dueMinute,
     );
+  }
+
+  /// Entries with a return date whose money is still owed in their direction,
+  /// soonest first. Same rule the reminders use, so a settled khata is not
+  /// listed. Returns an empty list when the data cannot be read.
+  Future<List<ReturnItem>> returnsDue() async {
+    try {
+      final db = await dbhelper.getDB();
+      final rows = await db.rawQuery('''
+        SELECT t.${Dbhelper.colTransId} AS tid, t.${Dbhelper.colAmount} AS amt,
+          t.${Dbhelper.colTrantype} AS typ,
+          t.${Dbhelper.colTranPaymentDueAt} AS dueAt,
+          t.${Dbhelper.colTranPaymentDueMinute} AS dueMin,
+          c.${Dbhelper.colCustomerId} AS cid,
+          c.${Dbhelper.colCustomerName} AS cname,
+          c.${Dbhelper.colCustomerCurrentBalance} AS bal
+        FROM ${Dbhelper.tableTrans} t
+        INNER JOIN ${Dbhelper.tableCus} c
+          ON c.${Dbhelper.colCustomerId} = t.${Dbhelper.colTranCusId}
+        WHERE t.${Dbhelper.colTranPaymentDueAt} IS NOT NULL
+      ''');
+      final items = <ReturnItem>[];
+      for (final row in rows) {
+        final balance = (row['bal'] as num?)?.toDouble() ?? 0;
+        final toGet = row['typ'] == 'Gave';
+        if (toGet ? balance <= 0 : balance >= 0) continue;
+        final minute = (row['dueMin'] as num?)?.toInt();
+        items.add(
+          ReturnItem(
+            transactionId: (row['tid'] as num).toInt(),
+            customerId: (row['cid'] as num).toInt(),
+            customerName: row['cname'] as String? ?? '',
+            amount: (row['amt'] as num).toDouble(),
+            type: row['typ'] as String,
+            dueDate: DateTime.parse(row['dueAt'] as String),
+            dueMinute: minute != null && minute >= 0 && minute < 24 * 60
+                ? minute
+                : null,
+          ),
+        );
+      }
+      items.sort((a, b) => a.deadline.compareTo(b.deadline));
+      return items;
+    } catch (error, stackTrace) {
+      debugPrint('Reading due returns failed: $error\n$stackTrace');
+      return const [];
+    }
   }
 
   /// The customer whose ledger holds [transactionId], or null when the entry

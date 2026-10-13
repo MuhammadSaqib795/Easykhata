@@ -204,6 +204,43 @@ Future<void> showTransactionCalculatorSheet({
             });
           }
 
+          /// One-tap return date: [days] from today at the usual alert time.
+          Future<void> quickDue(int days) async {
+            final today = DateUtils.dateOnly(DateTime.now());
+            final settings = await PaymentReminderService.instance
+                .loadSettings();
+            if (!sheetContext.mounted) return;
+            final minutes =
+                paymentDueMinute ??
+                settings.dueDayTime.hour * 60 + settings.dueDayTime.minute;
+            final date = DateTime(today.year, today.month, today.day + days);
+            if (!isReminderTimeInFuture(
+              dueDate: date,
+              dueDayMinutes: minutes,
+              now: DateTime.now(),
+            )) {
+              await showPassedTimeWarning(sheetContext);
+              return;
+            }
+            var allowed = false;
+            try {
+              allowed = await PaymentReminderService.instance
+                  .requestPermissions();
+            } catch (error, stackTrace) {
+              debugPrint(
+                'Requesting payment reminder permission failed: '
+                '$error\n$stackTrace',
+              );
+            }
+            if (!sheetContext.mounted) return;
+            setModalState(() {
+              paymentDueDate = date;
+              paymentDueMinute = minutes;
+              alertTimePassed = false;
+              notificationsOff = !allowed;
+            });
+          }
+
           final media = MediaQuery.of(sheetContext);
           final keyboardOpen = media.viewInsets.bottom > 0;
           final calcHeight = (media.size.height * 0.36).clamp(230.0, 340.0);
@@ -502,6 +539,50 @@ Future<void> showTransactionCalculatorSheet({
                                 ),
                               ),
                             ),
+                          ),
+                        ),
+
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 4,
+                                children: [
+                                  ActionChip(
+                                    label: const Text('Tomorrow'),
+                                    onPressed: isSaving
+                                        ? null
+                                        : () => quickDue(1),
+                                  ),
+                                  ActionChip(
+                                    label: const Text('In 1 week'),
+                                    onPressed: isSaving
+                                        ? null
+                                        : () => quickDue(7),
+                                  ),
+                                  ActionChip(
+                                    label: const Text('Pick date and time'),
+                                    onPressed: isSaving
+                                        ? null
+                                        : pickPaymentDueDate,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                'A return date is optional. With one, you get '
+                                '3 reminders the day before and 1 on the day, '
+                                'until the khata is settled.',
+                                style: TextStyle(
+                                  color: AppColors.muted,
+                                  fontSize: 12,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
 

@@ -88,7 +88,7 @@ class TransactionHistorySliver extends StatelessWidget {
           final outstanding = tx.type == 'Gave'
               ? currentBalance > 0
               : currentBalance < 0;
-          return _HistoryTile(
+          final tile = _HistoryTile(
             tx: tx,
             before: line.before,
             after: line.after,
@@ -97,9 +97,44 @@ class TransactionHistorySliver extends StatelessWidget {
                 ? null
                 : () => onExtend!(tx),
           );
+          // Entries are newest first: a header starts each new day.
+          final newDay =
+              i == 0 ||
+              !DateUtils.isSameDay(
+                lines[i - 1].transaction.dateTime,
+                tx.dateTime,
+              );
+          if (!newDay) return tile;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: EdgeInsets.fromLTRB(2, i == 0 ? 0 : 8, 2, 8),
+                child: Text(
+                  _dayLabel(tx.dateTime),
+                  style: const TextStyle(
+                    color: AppColors.muted,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              tile,
+            ],
+          );
         },
       ),
     );
+  }
+
+  static String _dayLabel(DateTime day) {
+    final now = DateTime.now();
+    if (DateUtils.isSameDay(day, now)) return 'Today';
+    if (DateUtils.isSameDay(day, now.subtract(const Duration(days: 1)))) {
+      return 'Yesterday';
+    }
+    return formatDate(day);
   }
 }
 

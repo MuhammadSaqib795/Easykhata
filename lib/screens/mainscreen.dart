@@ -6,8 +6,12 @@ import 'package:digitalkhata/screens/backup_screen.dart';
 import 'package:digitalkhata/screens/sales_history_screen.dart';
 import 'package:digitalkhata/services/auto_sync_service.dart';
 import 'package:digitalkhata/services/payment_reminder_service.dart';
-import 'package:digitalkhata/tabs/pos_tab.dart';
+import 'package:digitalkhata/tabs/home_tab.dart';
+import 'package:digitalkhata/tabs/products_tab.dart';
+import 'package:digitalkhata/tabs/sale_tab.dart';
 import 'package:digitalkhata/tabs/settings_tab.dart';
+import 'package:digitalkhata/widgets/app_widgets.dart';
+import 'package:digitalkhata/widgets/product_editor.dart';
 import 'package:digitalkhata/tabs/tab1/customer_details.dart';
 import 'package:digitalkhata/tabs/tab1/tab1.dart';
 import 'package:digitalkhata/theme/app_theme.dart';
@@ -25,10 +29,62 @@ class Mainscreen extends StatefulWidget {
 }
 
 class _MainscreenState extends State<Mainscreen> {
-  static const _khata = 0;
-  static const _pos = 1;
+  static const _home = 0;
+  static const _khata = 1;
+  static const _sale = 2;
+  static const _products = 3;
 
-  int _tab = _khata;
+  static const _titles = [
+    AppBrand.name,
+    'Khata',
+    'New sale',
+    'Products',
+    'More',
+  ];
+  static const _destinations = [
+    (Icons.home_outlined, Icons.home_rounded, 'Home'),
+    (Icons.menu_book_outlined, Icons.menu_book_rounded, 'Khata'),
+    (Icons.point_of_sale_outlined, Icons.point_of_sale_rounded, 'Sale'),
+    (Icons.inventory_2_outlined, Icons.inventory_2_rounded, 'Products'),
+    (Icons.more_horiz_rounded, Icons.more_horiz_rounded, 'More'),
+  ];
+
+  int _tab = _home;
+
+  /// Bumped each time Home is opened, so its figures are read again.
+  int _homeRefresh = 0;
+
+  void _select(int index) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _tab = index;
+      if (index == _home) _homeRefresh++;
+    });
+  }
+
+  Widget? _floatingAction() {
+    switch (_tab) {
+      case _home:
+        return FloatingActionButton.extended(
+          onPressed: () => _select(_sale),
+          icon: const Icon(Icons.add_shopping_cart_rounded),
+          label: const Text('New sale'),
+        );
+      case _khata:
+        return FloatingActionButton.extended(
+          onPressed: () => _open(const AddCustomerPage()),
+          icon: const Icon(Icons.person_add_alt_1_rounded),
+          label: const Text('Add customer'),
+        );
+      case _products:
+        return FloatingActionButton.extended(
+          onPressed: () => showProductEditor(context),
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Add product'),
+        );
+    }
+    return null;
+  }
   final ValueNotifier<int?> _reminderTap =
       PaymentReminderService.instance.tappedTransactionId;
 
@@ -224,20 +280,8 @@ class _MainscreenState extends State<Mainscreen> {
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(const [AppBrand.name, 'Point of sale', 'Settings'][_tab]),
-        actions: [
-          if (_tab == _pos)
-            IconButton(
-              tooltip: 'Sales history',
-              icon: const Icon(Icons.receipt_long_outlined),
-              onPressed: () => _open(const SalesHistoryScreen()),
-            ),
-          const SizedBox(width: 4),
-        ],
-      ),
-      body: Column(
+    final wide = isWideLayout(context);
+    final content = Column(
         children: [
           if (operationError != null)
             _Banner(
@@ -258,50 +302,77 @@ class _MainscreenState extends State<Mainscreen> {
             // still there after a look at another tab.
             child: IndexedStack(
               index: _tab,
-              children: const [Tab1(), PosTab(), SettingsTab()],
+              children: [
+                HomeTab(
+                  refreshToken: _homeRefresh,
+                  onNewSale: () => _select(_sale),
+                ),
+                const Tab1(),
+                SaleTab(onGoToProducts: () => _select(_products)),
+                const ProductsTab(),
+                const SettingsTab(),
+              ],
             ),
           ),
         ],
-      ),
-      floatingActionButton: _tab == _khata
-          ? FloatingActionButton.extended(
-              backgroundColor: AppColors.navy,
-              foregroundColor: Colors.white,
-              elevation: 2,
-              onPressed: () => _open(const AddCustomerPage()),
-              icon: const Icon(Icons.person_add_alt_1_rounded),
-              label: const Text(
-                'Add customer',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-            )
-          : null,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
-        backgroundColor: Colors.white,
-        indicatorColor: AppColors.navy.withValues(alpha: 0.1),
-        onDestinationSelected: (index) {
-          FocusManager.instance.primaryFocus?.unfocus();
-          setState(() => _tab = index);
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.menu_book_outlined),
-            selectedIcon: Icon(Icons.menu_book_rounded),
-            label: 'Khata',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.point_of_sale_outlined),
-            selectedIcon: Icon(Icons.point_of_sale_rounded),
-            label: 'POS',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings_rounded),
-            label: 'Settings',
-          ),
+      );
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_titles[_tab]),
+        actions: [
+          if (_tab == _sale)
+            IconButton(
+              tooltip: 'Sales history',
+              icon: const Icon(Icons.receipt_long_outlined),
+              onPressed: () => _open(const SalesHistoryScreen()),
+            ),
+          const SizedBox(width: 4),
         ],
       ),
+      body: wide
+          ? Row(
+              children: [
+                // Landscape phones are wide but short: icons only then.
+                LayoutBuilder(
+                  builder: (context, box) => NavigationRail(
+                    selectedIndex: _tab,
+                    backgroundColor: Colors.white,
+                    indicatorColor: AppColors.navy.withValues(alpha: 0.1),
+                    labelType: box.maxHeight < 480
+                        ? NavigationRailLabelType.none
+                        : NavigationRailLabelType.all,
+                    onDestinationSelected: _select,
+                    destinations: [
+                      for (final (icon, selected, label) in _destinations)
+                        NavigationRailDestination(
+                          icon: Icon(icon),
+                          selectedIcon: Icon(selected),
+                          label: Text(label),
+                        ),
+                    ],
+                  ),
+                ),
+                const VerticalDivider(width: 1),
+                Expanded(child: content),
+              ],
+            )
+          : content,
+      floatingActionButton: _floatingAction(),
+      bottomNavigationBar: wide
+          ? null
+          : NavigationBar(
+              selectedIndex: _tab,
+              onDestinationSelected: _select,
+              destinations: [
+                for (final (icon, selected, label) in _destinations)
+                  NavigationDestination(
+                    icon: Icon(icon),
+                    selectedIcon: Icon(selected),
+                    label: label,
+                  ),
+              ],
+            ),
     );
   }
 }

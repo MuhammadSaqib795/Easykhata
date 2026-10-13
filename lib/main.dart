@@ -37,6 +37,8 @@ class MyApp extends StatelessWidget {
       title: AppBrand.name,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: ThemeMode.light,
       // Keep layouts intact with very large system font sizes.
       builder: (context, child) => MediaQuery.withClampedTextScaling(
         maxScaleFactor: 1.3,

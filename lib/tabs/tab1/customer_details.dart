@@ -20,10 +20,15 @@ class Customerdetails extends StatefulWidget {
   /// ledger opens (the user tapped that entry's reminder).
   final int? extendTransactionId;
 
+  /// Set when the ledger sits in a side pane instead of its own screen:
+  /// called instead of leaving the screen after the customer is deleted.
+  final VoidCallback? onClosed;
+
   const Customerdetails({
     super.key,
     required this.item,
     this.extendTransactionId,
+    this.onClosed,
   });
 
   @override
@@ -128,6 +133,11 @@ class _CustomerdetailsState extends State<Customerdetails> {
       onEditEntry: _editTransaction,
       onExtendEntry: _extendReturnDate,
       actions: [
+        IconButton(
+          tooltip: 'Share PDF',
+          onPressed: _generatingPdf ? null : () => _exportPdf(share: true),
+          icon: const Icon(Icons.share_outlined),
+        ),
         PopupMenuButton<String>(
           tooltip: 'More',
           icon: const Icon(Icons.more_vert_rounded),
@@ -277,7 +287,12 @@ class _CustomerdetailsState extends State<Customerdetails> {
       await dbProvider.deleteCustomer(customer.id!);
       if (!mounted) return;
       showAppSnack(context, 'Customer deleted.');
-      Navigator.of(context).pop();
+      final onClosed = widget.onClosed;
+      if (onClosed != null) {
+        onClosed();
+      } else {
+        Navigator.of(context).pop();
+      }
     } on KhataNotSettledException catch (e) {
       // An entry was added meanwhile: the database refused the delete.
       if (!mounted) return;
